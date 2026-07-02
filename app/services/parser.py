@@ -1,7 +1,6 @@
 import json
 import logging
 import re
-from datetime import datetime
 from typing import Any
 
 import httpx
@@ -55,28 +54,29 @@ async def _call_llm(source: ReservationSource, subject: str, body: str) -> dict 
         f"Body:\n{body[:6000]}"
     )
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{settings.openrouter_base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
-                "HTTP-Referer": "https://hotel-kotnik.local",
-                "X-Title": "Hotel Kotnik Reservation Parser",
-            },
-            json={
-                "model": settings.openrouter_model,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content},
-                ],
-                "temperature": 0,
-                "max_tokens": 512,
-            },
-        )
-        resp.raise_for_status()
+    url = f"{settings.ollama_url.rstrip('/')}/v1/chat/completions"
+    payload = {
+        "model": settings.ollama_model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        "temperature": 0,
+        "max_tokens": 512,
+        "stream": False,
+    }
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        try:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.error("Ollama request failed: %s", exc)
+            return None
+
         content = resp.json()["choices"][0]["message"]["content"].strip()
 
-    # Strip markdown fences if present
+    # Strip markdown fences if model wraps JSON in ```
     content = re.sub(r"^```(?:json)?\s*", "", content)
     content = re.sub(r"\s*```$", "", content)
 
@@ -94,7 +94,7 @@ async def parse_email(
 ) -> dict | None:
     """
     Returns parsed dict or None on failure.
-    Tries regex fast-path for Cubilis; falls back to LLM.
+    Tries regex fast-path for Cubilis; falls back to local Ollama LLM.
     """
     if source == ReservationSource.cubilis:
         result = cubilis_prompts.try_regex_parse(body)

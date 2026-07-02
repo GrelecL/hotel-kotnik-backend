@@ -20,6 +20,50 @@ services:
     volumes:
       - redisdata:/data
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    # --- NVIDIA GPU passthrough (Proxmox): uncomment if GPU is available ---
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    ports:
+      - "127.0.0.1:11434:11434"   # only accessible locally on VM
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18        # up to 3 minutes for cold start
+      start_period: 15s
+
+  # Pulls the model on first run (or updates it); exits when done.
+  # api + email-worker wait for this to complete successfully.
+  ollama-init:
+    image: curlimages/curl:latest
+    restart: "no"
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama...' &&
+        until curl -sf http://ollama:11434/api/tags > /dev/null; do sleep 3; done &&
+        echo 'Pulling model: '$$OLLAMA_MODEL &&
+        curl -sf --max-time 1800
+          -X POST http://ollama:11434/api/pull
+          -H 'Content-Type: application/json'
+          -d \"{\\\"name\\\":\\\"$$OLLAMA_MODEL\\\",\\\"stream\\\":false}\" &&
+        echo 'Model ready.'
+      "
+    depends_on:
+      ollama:
+        condition: service_healthy
+
   migrate:
     build: .
     command: alembic upgrade head
@@ -36,7 +80,6 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
     ports:
-      # Bind only to Tailscale interface - set TAILSCALE_IP in .env
       - "${TAILSCALE_IP:-0.0.0.0}:8000:8000"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
@@ -47,16 +90,17 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://hotel:${DB_PASSWORD}@db:5432/hotel_kotnik
       REDIS_URL: redis://redis:6379/0
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-google/gemini-2.0-flash-001}
       FERNET_KEY: ${FERNET_KEY}
       EMAIL_POLL_INTERVAL: ${EMAIL_POLL_INTERVAL:-45}
-      # Disable embedded poll loop - worker handles this separately
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       RUN_EMAIL_WORKER: "false"
     depends_on:
       db:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      ollama-init:
         condition: service_completed_successfully
 
   email-worker:
@@ -66,16 +110,19 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://hotel:${DB_PASSWORD}@db:5432/hotel_kotnik
       REDIS_URL: redis://redis:6379/0
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-google/gemini-2.0-flash-001}
       FERNET_KEY: ${FERNET_KEY}
       EMAIL_POLL_INTERVAL: ${EMAIL_POLL_INTERVAL:-45}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
     depends_on:
       db:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      ollama-init:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
   redisdata:
+  ollama_data:

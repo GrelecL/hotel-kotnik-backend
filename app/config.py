@@ -7,9 +7,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://hotel:hotel@db:5432/hotel_kotnik"
     redis_url: str = "redis://redis:6379/0"
-    openrouter_api_key: str = ""
-    openrouter_model: str = "google/gemini-2.0-flash-001"
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    ollama_url: str = "http://ollama:11434"
+    ollama_model: str = "qwen2.5:3b"
 
     email_poll_interval: int = 45  # seconds
     email_inbox_folder: str = "INBOX"
