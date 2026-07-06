@@ -87,5 +87,6 @@ class ReservationOut(BaseModel):
     status: ReservationStatus
     manual_override: bool
     notes: str | None
+    raw_email_id: int | None
     created_at: datetime
     updated_at: datetime

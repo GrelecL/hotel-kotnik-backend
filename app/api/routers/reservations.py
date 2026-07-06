@@ -47,6 +47,7 @@ async def list_reservations(
     from_date: date | None = None,
     to_date: date | None = None,
     status: ReservationStatus | None = None,
+    guest: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     q = select(Reservation)
@@ -57,9 +58,11 @@ async def list_reservations(
         filters.append(Reservation.checkin < to_date)
     if status:
         filters.append(Reservation.status == status)
+    if guest:
+        filters.append(Reservation.guest_name.ilike(f"%{guest}%"))
     if filters:
         q = q.where(and_(*filters))
-    q = q.order_by(Reservation.checkin, Reservation.guest_name)
+    q = q.order_by(Reservation.checkin.desc(), Reservation.guest_name)
     result = await db.execute(q)
     return result.scalars().all()
 
