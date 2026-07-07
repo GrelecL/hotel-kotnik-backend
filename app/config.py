@@ -7,8 +7,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://hotel:hotel@db:5432/hotel_kotnik"
     redis_url: str = "redis://redis:6379/0"
-    ollama_url: str = "http://ollama:11434"
-    ollama_model: str = "qwen2.5:3b"
+    ollama_url: str = "http://host.docker.internal:11434"
+    ollama_model: str = "gemma3:latest"
 
     email_poll_interval: int = 45  # seconds
     email_inbox_folder: str = "INBOX"
