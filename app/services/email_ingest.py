@@ -61,6 +61,13 @@ async def _get_admin_settings(db: AsyncSession) -> AdminSettings | None:
 async def _resolve_category_id(db: AsyncSession, category_name: str | None) -> int | None:
     if not category_name:
         return None
+    # Try: DB name contained in parsed string (e.g. "Dvoposteljna" in "DVOJNA POSTELJNA SOBA")
+    all_cats = (await db.execute(select(RoomCategory))).scalars().all()
+    parsed_lower = category_name.lower()
+    for cat in all_cats:
+        if cat.name.lower() in parsed_lower:
+            return cat.id
+    # Fallback: parsed string contained in DB name
     result = await db.execute(
         select(RoomCategory).where(RoomCategory.name.ilike(f"%{category_name}%"))
     )
