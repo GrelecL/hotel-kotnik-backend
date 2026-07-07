@@ -89,8 +89,11 @@ async def patch_reservation(
     room_changed = False
 
     updates = body.model_dump(exclude_unset=True)
+    tax_manual = "tourist_tax_total" in updates
     for field, value in updates.items():
-        if value is not None:
+        if field == "tourist_tax_total":
+            res.tourist_tax_total = value   # allow explicit 0 / None
+        elif value is not None:
             setattr(res, field, value)
             if field in ("assigned_room_id", "checkin", "checkout"):
                 room_changed = True
@@ -101,7 +104,8 @@ async def patch_reservation(
     if room_changed:
         res.manual_override = True
 
-    _recompute_tax(res, admin)
+    if not tax_manual:
+        _recompute_tax(res, admin)
     db.add(EventLog(reservation_id=res.id, event_type=EventType.modified, detail={}))
     await db.commit()
     await db.refresh(res)

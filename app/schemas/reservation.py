@@ -54,6 +54,7 @@ class ReservationPatch(BaseModel):
     board_type: BoardType | None = None
     price_total: Decimal | None = None
     price_currency: str | None = None
+    tourist_tax_total: Decimal | None = None
     notes: str | None = None
     assigned_room_id: int | None = None
     room_category_id: int | None = None
